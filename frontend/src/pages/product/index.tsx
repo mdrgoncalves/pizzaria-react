@@ -1,4 +1,4 @@
-import { useState, ChangeEvent } from 'react';
+import { useState, ChangeEvent, FormEvent } from 'react';
 
 import Head from 'next/head';
 import styles from './styles.module.scss';
@@ -9,18 +9,38 @@ import { canSSRAuth } from 'utils/canSSRAuth';
 import { FiUpload } from 'react-icons/fi';
 import Image from 'next/image';
 
-export default function Product() {
+import { setupAPIClient } from 'services/api';
+
+import { toast } from 'react-toastify';
+
+type ItemProps = {
+    id: string;
+    name: string;
+}
+
+interface CategoryProps {
+    categoriesList: ItemProps[];
+}
+
+export default function Product({ categoriesList }: CategoryProps) {
+
+    const [name, setName] = useState('');
+    const [price, setPrice] = useState('');
+    const [description, setDescription] = useState('');
 
     const [avatarUrl, setavatarUrl] = useState('');
     const [imageAvatar, setImageAvatar] = useState(null);
 
-    function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const [categories, setCategories] = useState(categoriesList || []);
+    const [categorySelected, setCategorySelected] = useState('');
 
-        if (!e.target.files) {
+    function handleFile(event: ChangeEvent<HTMLInputElement>) {
+
+        if (!event.target.files) {
             return;
         }
 
-        const image = e.target.files[0];
+        const image = event.target.files[0];
 
         if (!image) {
             return;
@@ -28,7 +48,42 @@ export default function Product() {
 
         if (image.type === 'image/jpeg' || image.type === 'image/png') {
             setImageAvatar(image);
-            setavatarUrl(URL.createObjectURL(e.target.files[0]));
+            setavatarUrl(URL.createObjectURL(event.target.files[0]));
+        }
+    }
+
+    async function handleRegister(event: FormEvent) {
+
+        event.preventDefault();
+
+        try {
+            const data = new FormData();
+
+            if(name === '' || price === '0' || description === '' || imageAvatar === null) {
+                toast.error('Preencha todos os campos!');
+                return;
+            }
+
+            data.append('name', name);
+            data.append('price', price);
+            data.append('description', description);
+            data.append('category_id', categories[categorySelected].id);
+            data.append('file', imageAvatar);
+
+            const apiClient = setupAPIClient();
+            await apiClient.post('/products', data);
+
+            toast.success('Produto cadastrado com sucesso!');
+
+            setName('');
+            setPrice('');
+            setDescription('');
+            setImageAvatar(null);
+            setavatarUrl('');
+
+        } catch(err) {
+            console.log(err);
+            toast.error('Ops! Erro ao cadastrar produto!');
         }
     }
 
@@ -41,7 +96,7 @@ export default function Product() {
             <Header />
             <main className={styles.container}>
                 <h1>Novo Produto</h1>
-                <form className={styles.form}>
+                <form className={styles.form} onSubmit={handleRegister}>
                     <label className={styles.labelAvatar}>
                         <span>
                             <FiUpload
@@ -64,24 +119,35 @@ export default function Product() {
                             />
                         }
                     </label>
-                    <select>
-                        <option>
-                            Bebida
-                        </option>
+                    <select 
+                        value={categorySelected}
+                        onChange={(event) => setCategorySelected(event.target.value)}
+                    >
+                        {categories.map((category, index) => (
+                            <option key={category.id} value={index}>
+                                {category.name}
+                            </option>
+                        ))}
                     </select>
                     <input 
                         type="text" 
                         placeholder="Nome do produto"
                         className={styles.input}
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
                     />
                     <input 
                         type="text" 
                         placeholder="Preço do produto"
                         className={styles.input}
+                        value={price}
+                        onChange={(event) => setPrice(event.target.value)}
                     />
                     <textarea 
                         placeholder="Descrição do produto"
                         className={styles.input}
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
                     />
                     <button
                         type="submit"
@@ -97,9 +163,16 @@ export default function Product() {
 }
 
 export const getServerSideProps = canSSRAuth(
-    async (ctx) => {
+
+    async (context) => {
+
+        const apiClient = setupAPIClient(context);
+        const response = await apiClient.get('/categories');
+
         return {
-            props: {}
+            props: {
+                categoriesList: response.data
+            }
         }
     }
 );
